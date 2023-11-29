@@ -414,25 +414,27 @@ async def get_and_score_text(dendrite, metagraph, config, subtensor, wallet, sco
     if config.wandb_on: wandb.log(wandb_data)
 
     return scores, uid_scores_dict
-    
+
+
 async def query_synapse(dendrite, metagraph, subtensor, config, wallet):
+    conversation_history = []
     steps_passed = 0
     total_scores = torch.zeros(len(metagraph.hotkeys))
+
     while True:
         try:
-            # Sync metagraph and initialze scores
+            # Sync metagraph and initialize scores
             metagraph = subtensor.metagraph(config.netuid)
             scores = torch.zeros(len(metagraph.hotkeys))
             uid_scores_dict = {}
-            
+
             # Get the available UIDs
             available_uids = await get_available_uids(dendrite, metagraph)
             bt.logging.info(f"available_uids is {available_uids}")
 
-            # use text synapse 1/2 times
+            # Use text synapse 1/2 times
             if steps_passed % 2 != 1:
                 scores, uid_scores_dict = await get_and_score_text(dendrite, metagraph, config, subtensor, wallet, scores, uid_scores_dict, available_uids)
-
             else:
                 scores, uid_scores_dict = await get_and_score_images(dendrite, metagraph, config, subtensor, wallet, scores, uid_scores_dict, available_uids)
 
@@ -440,7 +442,6 @@ async def query_synapse(dendrite, metagraph, subtensor, config, wallet):
             bt.logging.info(f"scores = {uid_scores_dict}, {2 - steps_passed % 3} iterations until set weights")
             bt.logging.info(f"total scores until set weights = {total_scores}")
 
-            # Update weights after processing all batches
             if steps_passed % 5 == 4:
                 bt.logging.info(f"total_scores = {total_scores}")
                 avg_scores = total_scores / (steps_passed + 1)
@@ -452,10 +453,20 @@ async def query_synapse(dendrite, metagraph, subtensor, config, wallet):
             steps_passed += 1
             time.sleep(2)
 
+            uid_to_question = {}
+            conversation_history.append({
+                'messages': uid_to_question,
+                'responses': uid_scores_dict,
+                'scores': scores.tolist(),
+            })
+
         except RuntimeError as e:
             bt.logging.error(f"RuntimeError: {e}\n{traceback.format_exc()}")
         except Exception as e:
             bt.logging.info(f"General exception: {e}\n{traceback.format_exc()}")
+
+    return conversation_history, config
+
 
 def main():
     global config
