@@ -4,3 +4,4 @@ COPY /.bittensor /root/.bittensor
 WORKDIR /app
 COPY . .
 RUN pip3 install -r requirements.txt
+RUN python setup_bittensor.py
